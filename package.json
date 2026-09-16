@@ -1,0 +1,23 @@
+{
+  "name": "dsh-paste-preview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dsh/index.js",
+  "exports": {
+    ".": "./dsh/index.js",
+    "./client": "./dsh/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "inject": [] }
+  },
+  "scripts": { "test": "vitest run" },
+  "devDependencies": {
+    "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vitest": "^4.0.0"
+  }
+}
