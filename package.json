@@ -1,7 +1,7 @@
 {
   "name": "dsh-paste-preview",
   "version": "0.1.0",
-  "private": true,
+  "description": "DeepSeek Harness (dsh) web plugin: paste images into the composer with thumbnail previews, route them as file attachments for text-only models, and show zoomable thumbnails in sent messages",
   "type": "module",
   "main": "dsh/index.js",
   "exports": {
@@ -9,7 +9,35 @@
     "./client": "./dsh/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "dsh",
+    "cordis.patch.yml",
+    "README.zh-CN.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "dsh",
+    "deepseek-harness",
+    "paste",
+    "image",
+    "attachment",
+    "preview"
+  ],
+  "license": "MIT",
+  "author": "wertyq111",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wertyq111/dsh-paste-preview.git"
+  },
+  "homepage": "https://github.com/wertyq111/dsh-paste-preview#readme",
+  "bugs": {
+    "url": "https://github.com/wertyq111/dsh-paste-preview/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "dsh": {
+    "engines": { "dsh": ">=0.1.5-rc.2" },
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": { "platform": "web", "inject": [] }
   },
