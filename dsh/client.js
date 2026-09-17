@@ -149,6 +149,10 @@ window.__ModuleLoader__.load({
       var h = react.createElement
       var useState = react.useState
       var useEffect = react.useEffect
+      var useRef = react.useRef
+
+      var _latestPropsRef = useRef(props)
+      _latestPropsRef.current = props
 
       var previewState = useState(null)
       var previewSrc = previewState[0]
@@ -159,26 +163,52 @@ window.__ModuleLoader__.load({
       useEffect(function () {
         var atts = props.attachments || []
         if (atts.length === 0) return
+
+        // Only act when unconverted image attachments exist
+        var hasImage = false
+        for (var k = 0; k < atts.length; k++) {
+          if (atts[k].kind === 'image' && !convertingIds[atts[k].id]) { hasImage = true; break }
+        }
+        if (!hasImage) return
+
         var label = currentModelLabel()
-        // Read before refreshing: refreshVerdict swaps in a pending entry.
         var cached = verdicts[label]
         refreshVerdict(label)
-        if (!cached || cached.takeover !== true || cached.pending) return
-        for (var i = 0; i < atts.length; i++) {
-          var a = atts[i]
-          if (a.kind !== 'image') continue
-          if (convertingIds[a.id]) continue
-          var file = a.file
-          if (!file) continue
-          convertingIds[a.id] = true
-          var rewritten = new File([file], file.name, { type: 'application/octet-stream', lastModified: file.lastModified })
-          var id = a.id
-          Promise.resolve().then(function () {
-            props.onRemoveAttachment(id)
-            props.onAddFiles([rewritten])
-          })
-          break
+
+        function doConvert() {
+          var latest = _latestPropsRef.current
+          var currentAtts = latest ? (latest.attachments || []) : atts
+          for (var i = 0; i < currentAtts.length; i++) {
+            var a = currentAtts[i]
+            if (a.kind !== 'image') continue
+            if (convertingIds[a.id]) continue
+            var file = a.file
+            if (!file) continue
+            convertingIds[a.id] = true
+            var rewritten = new File([file], file.name, { type: 'application/octet-stream', lastModified: file.lastModified })
+            var id = a.id
+            if (latest) {
+              latest.onRemoveAttachment(id)
+              latest.onAddFiles([rewritten])
+            }
+            break
+          }
         }
+
+        if (cached && cached.takeover === true && !cached.pending) {
+          // Verdict already ready — convert immediately
+          doConvert()
+          return
+        }
+
+        // Verdict pending — poll until resolved, then convert if takeover
+        var timer = setInterval(function () {
+          var c = verdicts[label]
+          if (!c || c.pending) return
+          clearInterval(timer)
+          if (c.takeover === true) doConvert()
+        }, 150)
+        return function () { clearInterval(timer) }
       }, [props.attachments])
 
       useEffect(function () {
