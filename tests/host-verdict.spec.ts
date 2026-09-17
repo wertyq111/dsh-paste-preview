@@ -42,6 +42,16 @@ describe('takeoverVerdict', () => {
     )).toBe(false)
   })
 
+  it('ignores modlens vision twins that reuse a text-only model id', async () => {
+    const catalog: Record<string, any[]> = {
+      siliconflow: [{ id: 'deepseek-ai/DeepSeek-V4-Pro', name: 'deepseek-ai/DeepSeek-V4-Pro', inputModalities: ['text'] }],
+      'modlens-siliconflow': [{ id: 'deepseek-ai/DeepSeek-V4-Pro', name: 'deepseek-ai/DeepSeek-V4-Pro (modlens vision)', inputModalities: ['text', 'image'] }],
+    }
+    const host = { listProviders: () => Object.keys(catalog).map(id => ({ id })), listModels: async (id: string) => catalog[id] }
+    expect(await takeoverVerdict(host, '选择模型，当前 deepseek-ai/DeepSeek-V4-Pro')).toBe(true)
+    expect(await takeoverVerdict(host, '选择模型，当前 deepseek-ai/DeepSeek-V4-Pro (modlens vision)')).toBe(false)
+  })
+
   it('returns false when no model matches the label', async () => {
     expect(await takeoverVerdict(
       llm([{ id: 'other', name: 'Other', inputModalities: ['text'] }]),

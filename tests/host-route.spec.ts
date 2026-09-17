@@ -9,6 +9,7 @@ function harness(models: any[]) {
     },
   }
   const hostCtx = {
+    connection: { requestRejection: () => undefined },
     llm: {
       listProviders: () => [{ id: 'p1' }],
       listModels: async () => models,
@@ -38,7 +39,7 @@ describe('verdict route', () => {
     const route = harness([{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', inputModalities: ['text'] }])
     const r = res()
     await route.handler(
-      { method: 'GET', url: '/dsh-paste-preview/verdict?model=' + encodeURIComponent('DeepSeek V4 Flash') },
+      { method: 'GET', headers: {}, url: '/dsh-paste-preview/verdict?model=' + encodeURIComponent('DeepSeek V4 Flash') },
       r
     )
     expect(r.out.code).toBe(200)
@@ -48,7 +49,7 @@ describe('verdict route', () => {
   it('rejects non-GET with 405', async () => {
     const route = harness([])
     const r = res()
-    await route.handler({ method: 'POST', url: '/dsh-paste-preview/verdict' }, r)
+    await route.handler({ method: 'POST', headers: {}, url: '/dsh-paste-preview/verdict' }, r)
     expect(r.out.code).toBe(405)
   })
 })

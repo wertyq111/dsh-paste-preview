@@ -33,7 +33,7 @@ function fileAtt(id: string, name: string) {
 beforeEach(() => {
   document.body.innerHTML = ''
   delete (globalThis as any).fetch
-  ;(globalThis as any).fetch = vi.fn()
+  ;(globalThis as any).fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ takeover: false }) }))
 })
 
 describe('attachment rail', () => {
@@ -120,4 +120,187 @@ describe('attachment rail', () => {
     ;(retryBtn as HTMLButtonElement).click()
     expect(onRetry).toHaveBeenCalledWith('f2')
   })
+
+  it('shows remove button on hover (opacity 1) and hides on leave (opacity 0)', async () => {
+    const mod = await load()
+    const C = mod.__internal.AttachmentRail
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    createRoot(host).render(createElement(C, {
+      attachments: [imageAtt('i1')],
+      canAcceptDrop: true,
+      onAddFiles: () => {},
+      onRemoveAttachment: () => {},
+      uploads: {},
+      onRetryFile: () => {},
+    }))
+    await new Promise((r) => setTimeout(r, 50))
+
+    // In jsdom, matchMedia('(pointer: coarse)') likely returns false → hover mode.
+    const removeBtn = host.querySelector('[data-role="remove-btn"]') as HTMLElement
+    expect(removeBtn).toBeTruthy()
+    // Default: opacity 0 in non-touch
+    expect(removeBtn.style.opacity).toBe('0')
+
+    // React handles mouseenter/mouseleave via mouseover/mouseout on the root.
+    // Simulate mouseover on the container (which bubbles) to trigger onMouseEnter.
+    const container = removeBtn.parentElement as HTMLElement
+    expect(container).toBeTruthy()
+    container!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(removeBtn.style.opacity).toBe('1')
+
+    // Simulate mouseout on the container to trigger onMouseLeave.
+    container!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(removeBtn.style.opacity).toBe('0')
+  })
+
+  it('opens lightbox on thumbnail click and closes on overlay click', async () => {
+    const mod = await load()
+    const C = mod.__internal.AttachmentRail
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    createRoot(host).render(createElement(C, {
+      attachments: [imageAtt('i1')],
+      canAcceptDrop: true,
+      onAddFiles: () => {},
+      onRemoveAttachment: () => {},
+      uploads: {},
+      onRetryFile: () => {},
+    }))
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Click the thumbnail button
+    const thumbBtn = Array.from(host.querySelectorAll('button')).find(
+      b => b.getAttribute('aria-label') === 'Preview x.png'
+    ) as HTMLButtonElement
+    expect(thumbBtn).toBeTruthy()
+    thumbBtn!.click()
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Lightbox should be visible
+    const lightboxImg = host.querySelector('img[alt="Preview"]') as HTMLImageElement
+    expect(lightboxImg).toBeTruthy()
+    expect(lightboxImg!.getAttribute('src')).toBe('blob:image-i1')
+
+    // Click the close button
+    const closeBtn = Array.from(host.querySelectorAll('button')).find(
+      b => b.getAttribute('aria-label') === 'Close preview'
+    ) as HTMLButtonElement
+    expect(closeBtn).toBeTruthy()
+    closeBtn!.click()
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Lightbox should be gone
+    expect(host.querySelector('img[alt="Preview"]')).toBeNull()
+  })
+
+  it('closes lightbox on Escape key', async () => {
+    const mod = await load()
+    const C = mod.__internal.AttachmentRail
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    createRoot(host).render(createElement(C, {
+      attachments: [imageAtt('i1')],
+      canAcceptDrop: true,
+      onAddFiles: () => {},
+      onRemoveAttachment: () => {},
+      uploads: {},
+      onRetryFile: () => {},
+    }))
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Open lightbox
+    const thumbBtn = Array.from(host.querySelectorAll('button')).find(
+      b => b.getAttribute('aria-label') === 'Preview x.png'
+    ) as HTMLButtonElement
+    thumbBtn!.click()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(host.querySelector('img[alt="Preview"]')).toBeTruthy()
+
+    // Press Escape
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(host.querySelector('img[alt="Preview"]')).toBeNull()
+  })
+
+  it('registers dragover and drop listeners that call onAddFiles with rerouted files', async () => {
+    const mod = await load()
+    mod.__internal.verdicts['select model X'] = { takeover: true, at: Date.now(), pending: false }
+    const b = document.createElement('button')
+    b.setAttribute('aria-label', 'select model X')
+    document.body.appendChild(b)
+
+    const C = mod.__internal.AttachmentRail
+    const onAddFiles = vi.fn()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    createRoot(host).render(createElement(C, {
+      attachments: [],
+      canAcceptDrop: true,
+      onAddFiles: onAddFiles,
+      onRemoveAttachment: () => {},
+      uploads: {},
+      onRetryFile: () => {},
+    }))
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Simulate a drop with a PNG file and a text file
+    const pngFile = new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' })
+    const txtFile = new File(['hello'], 'b.txt', { type: 'text/plain' })
+    const dt = {
+      types: ['Files'],
+      files: [pngFile, txtFile],
+      dropEffect: 'none',
+    }
+    var dropEv = new Event('drop', { bubbles: true }) as any
+    dropEv.dataTransfer = dt
+    document.dispatchEvent(dropEv)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(onAddFiles).toHaveBeenCalledTimes(1)
+    const calledWith = onAddFiles.mock.calls[0][0] as File[]
+    expect(calledWith.length).toBe(2)
+    // PNG should be rewritten to octet-stream
+    expect(calledWith[0].type).toBe('application/octet-stream')
+    expect(calledWith[0].name).toBe('a.png')
+    // Text file should stay text/plain
+    expect(calledWith[1].type).toBe('text/plain')
+    expect(calledWith[1].name).toBe('b.txt')
+  })
+
+  it('does not rewrite images on drop when model supports images', async () => {
+    const mod = await load()
+    mod.__internal.verdicts['select model Y'] = { takeover: false, at: Date.now(), pending: false }
+    const b = document.createElement('button')
+    b.setAttribute('aria-label', 'select model Y')
+    document.body.appendChild(b)
+
+    const C = mod.__internal.AttachmentRail
+    const onAddFiles = vi.fn()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    createRoot(host).render(createElement(C, {
+      attachments: [],
+      canAcceptDrop: true,
+      onAddFiles: onAddFiles,
+      onRemoveAttachment: () => {},
+      uploads: {},
+      onRetryFile: () => {},
+    }))
+    await new Promise((r) => setTimeout(r, 50))
+
+    const pngFile = new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' })
+    const dt = { types: ['Files'], files: [pngFile], dropEffect: 'none' }
+    var dropEv2 = new Event('drop', { bubbles: true }) as any
+    dropEv2.dataTransfer = dt
+    document.dispatchEvent(dropEv2)
+    await new Promise((r) => setTimeout(r, 50))
+
+    const calledWith = onAddFiles.mock.calls[0][0] as File[]
+    // Image should keep its original MIME when model supports images
+    expect(calledWith[0].type).toBe('image/png')
+  })
+
 })
