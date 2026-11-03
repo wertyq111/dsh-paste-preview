@@ -35,6 +35,8 @@ This is not shipped in the plugin's own patch on purpose: a patch that targets a
 
 The browser asks `GET /dsh-paste-preview/verdict?model=<selector label>`. The host answers `takeover: true` only when every model whose name or id appears in the label declares text-only input. modlens' own "(modlens vision)" wrappers are ignored so they cannot veto the model they wrap. Unknown or unresolvable models answer `false`, which keeps the native behaviour.
 
+Session-aware composers (including DS Bot) use the session's `modelSelection` projection and pass the exact provider/model route to the host. The host resolves that route's real input modalities, so a hidden model selector and vision twins on other providers cannot change the decision. Older composers can still use the selector-label query. The attachment rail is absent for empty drafts and stays above the editor in DS Bot's wrapping layout.
+
 ## HTTP routes
 
 | Route | Purpose |

@@ -5,7 +5,11 @@ export const inject = ['llm']
 const MODLENS_PROVIDER_ID = /^(deepseek-modlens$|modlens-)/
 const MODLENS_VISION_NAME = /\(modlens vision\)/i
 
-export async function takeoverVerdict(llm, label) {
+export async function takeoverVerdict(llm, label, route) {
+  if (route) {
+    const model = await llm.resolveModelInfo(route.provider, route.model)
+    return Array.isArray(model.inputModalities) && !model.inputModalities.includes('image')
+  }
   if (typeof label !== 'string' || label.trim() === '') return false
   // A modlens wrapper is selected: it already handles images natively.
   if (MODLENS_VISION_NAME.test(label)) return false
@@ -65,14 +69,24 @@ export function registerVerdictRoute(webScope, hostCtx) {
         return
       }
       try {
-        const label = new URL(req.url, 'http://localhost').searchParams.get('model') ?? ''
-        const cached = verdicts.get(label)
+        const params = new URL(req.url, 'http://localhost').searchParams
+        const label = params.get('model') ?? ''
+        const provider = params.get('provider')
+        const model = params.get('modelId')
+        if ((provider === null) !== (model === null) || provider === '' || model === '') {
+          res.writeHead(400)
+          res.end()
+          return
+        }
+        const route = provider === null ? undefined : { provider, model }
+        const cacheKey = route ? 'route:' + JSON.stringify([provider, model]) : 'label:' + label
+        const cached = verdicts.get(cacheKey)
         let takeover
         if (cached && Date.now() - cached.at < VERDICT_TTL_MS) {
           takeover = cached.takeover
         } else {
-          takeover = await takeoverVerdict(hostCtx.llm, label)
-          verdicts.set(label, { takeover, at: Date.now() })
+          takeover = await takeoverVerdict(hostCtx.llm, label, route)
+          verdicts.set(cacheKey, { takeover, at: Date.now() })
           if (verdicts.size > VERDICT_CAP) verdicts.delete(verdicts.keys().next().value)
         }
         res.writeHead(200, { 'content-type': 'application/json' })
