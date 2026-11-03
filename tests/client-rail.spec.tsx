@@ -58,6 +58,35 @@ describe('attachment rail', () => {
     expect(groups.length).toBe(1)
   })
 
+  it('matches DS Bot rail selector without reading as a CSS Module rail', async () => {
+    const mod = await load()
+    const C = mod.__internal.AttachmentRail
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    createRoot(host).render(createElement(C, {
+      attachments: [imageAtt('i1')],
+      canAcceptDrop: true,
+      onAddFiles: () => {},
+      onRemoveAttachment: () => {},
+      uploads: {},
+      onRetryFile: () => {},
+    }))
+    await new Promise((r) => setTimeout(r, 50))
+    const rail = host.querySelector('[role="group"][aria-label="Pending attachments"]') as HTMLElement
+    // DS Bot lays the composer out around [class*="_rail"].
+    expect(rail.matches('[class*="_rail"]')).toBe(true)
+    // The native composer card is a column flexbox whose height can be definite; a
+    // percentage basis there sizes the rail to the whole card and hides the editor.
+    expect(rail.style.flexBasis.endsWith('%')).toBe(false)
+    expect(rail.style.width).toBe('100%')
+    // Composer skins such as dsh-claude-style map `<module>_<key>` class names onto
+    // native parts; a bare `_rail` key would pull in the native rail's layout.
+    for (const name of Array.from(rail.classList)) {
+      const key = name.split('_').pop() as string
+      expect(/^[a-z][A-Za-z0-9]*$/.test(key)).toBe(false)
+    }
+  })
+
   it('renders blobURL thumbnail for .png file attachments', async () => {
     const mod = await load()
     const C = mod.__internal.AttachmentRail

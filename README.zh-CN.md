@@ -35,6 +35,8 @@ modlens 自带的 paste-to-path 会先拦截粘贴，需要在 profile 的 `cord
 
 浏览器请求 `GET /dsh-paste-preview/verdict?model=<模型选择器标签>`。只有标签中出现的所有模型都明确声明为纯文本输入时，服务端才返回 `takeover: true`。modlens 自己注册的"(modlens vision)"包装模型会被忽略，避免它否决被包装的模型。模型未知或无法解析时返回 `false`，保持原生行为。
 
+支持会话投影的输入框（包括 DS Bot）通过 `modelSelection` 取得真实 provider/model，交给服务端按精确路由判断输入模态，不再依赖可见的模型选择按钮，也不会被其他 provider 的视觉同名模型干扰。旧版输入框仍兼容模型标签查询。没有附件时不渲染空栏；DS Bot 中的附件轨道独占文字上方一行。
+
 ## HTTP 路由
 
 | 路由 | 用途 |

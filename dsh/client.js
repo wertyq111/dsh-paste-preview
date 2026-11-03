@@ -5,6 +5,7 @@ window.__ModuleLoader__.load({
     var exports = module.exports
     var verdicts = {}
     var VERDICT_MAX_AGE_MS = 60000
+    var currentModelRef = { current: null }
 
     function currentModelLabel() {
       var buttons = document.querySelectorAll('button[aria-label]')
@@ -12,7 +13,8 @@ window.__ModuleLoader__.load({
         var label = buttons[i].getAttribute('aria-label') || ''
         if (/选择模型|select model|current model/i.test(label)) return label
       }
-      return ''
+      var route = currentModelRef.current
+      return route ? route.provider + '/' + route.model : ''
     }
 
     var _verdictListeners = []
@@ -32,14 +34,19 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function refreshVerdict(label) {
+    function refreshVerdict(label, route) {
       if (!label) return
       var cached = verdicts[label]
       if (cached && cached.pending) return
       var entry = { pending: true, takeover: cached ? cached.takeover : false, at: cached ? cached.at : 0 }
       verdicts[label] = entry
       if (typeof fetch !== 'function') return
-      fetch('/dsh-paste-preview/verdict?model=' + encodeURIComponent(label))
+      var selected = route || currentModelRef.current
+      var query = '/dsh-paste-preview/verdict?model=' + encodeURIComponent(label)
+      if (selected && label === selected.provider + '/' + selected.model) {
+        query += '&provider=' + encodeURIComponent(selected.provider) + '&modelId=' + encodeURIComponent(selected.model)
+      }
+      fetch(query)
         .then(function (res) {
           if (!res.ok) throw new Error('verdict ' + res.status)
           return res.json()
@@ -159,6 +166,13 @@ window.__ModuleLoader__.load({
       var setPreviewSrc = previewState[1]
 
       var touchDevice = useState(function () { return isTouchDevice() })[0]
+      // Session slots carry the selected route even when a custom UI hides the model selector.
+      var route = typeof props.useProjection === 'function'
+        ? props.useProjection('modelSelection', function (value) { return value ? value.next || value.lastUsed : null })
+        : null
+      currentModelRef.current = route
+      var modelLabel = route ? route.provider + '/' + route.model : currentModelLabel()
+      useEffect(function () { if (route) refreshVerdict(modelLabel, route) }, [modelLabel])
 
       useEffect(function () {
         var atts = props.attachments || []
@@ -171,9 +185,9 @@ window.__ModuleLoader__.load({
         }
         if (!hasImage) return
 
-        var label = currentModelLabel()
+        var label = modelLabel
         var cached = verdicts[label]
-        refreshVerdict(label)
+        refreshVerdict(label, route)
 
         function doConvert() {
           var latest = _latestPropsRef.current
@@ -209,7 +223,7 @@ window.__ModuleLoader__.load({
           if (c.takeover === true) doConvert()
         }, 150)
         return function () { clearInterval(timer) }
-      }, [props.attachments])
+      }, [props.attachments, modelLabel])
 
       useEffect(function () {
         var ids = {}
@@ -263,7 +277,9 @@ window.__ModuleLoader__.load({
         return function () { document.removeEventListener('keydown', handleKeyDown) }
       }, [previewSrc])
 
-      var children = (props.attachments || []).map(function (a) {
+      if (!props.attachments || props.attachments.length === 0) return null
+
+      var children = props.attachments.map(function (a) {
         var upload = (props.uploads || {})[a.id]
         var preview
         if (a.kind === 'image') {
@@ -431,7 +447,11 @@ window.__ModuleLoader__.load({
         )
       }
 
-      return h('div', { role: 'group', 'aria-label': 'Pending attachments' },
+      // DS Bot matches [class*="_rail"]; the hyphenated tail keeps CSS Module parsers
+      // (dsh-claude-style) from treating this as the native rail and restyling it.
+      // width, not a percentage basis: the native card is a column flexbox whose
+      // definite height would otherwise become the rail's height.
+      return h('div', { className: 'dpp_rail-pending', role: 'group', 'aria-label': 'Pending attachments', style: { flex: '0 0 auto', width: '100%', order: 0 } },
         h('div', { style: railStyle }, children),
         lightbox
       )
